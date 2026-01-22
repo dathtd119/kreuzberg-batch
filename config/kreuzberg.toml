@@ -1,0 +1,99 @@
+# ============================================
+# Kreuzberg Extraction Configuration
+# Optimized for clean markdown output
+# ============================================
+
+# Enable caching for faster re-processing
+use_cache = true
+
+# Enable quality processing (removes noise, cleans artifacts)
+enable_quality_processing = true
+
+# ===========================================
+# OCR Settings
+# ===========================================
+[ocr]
+# OCR backend: tesseract (default)
+backend = "tesseract"
+
+# Languages for OCR (tesseract format)
+# Multiple languages: "eng+fra+deu"
+language = "eng"
+
+# Tesseract configuration
+[ocr.tesseract_config]
+# Page segmentation mode:
+# 3 = Fully automatic page segmentation (default)
+# 6 = Assume a single uniform block of text
+psm = 3
+
+# OCR Engine Mode:
+# 1 = LSTM only (best quality)
+oem = 1
+
+# Minimum confidence threshold (0.0-1.0)
+min_confidence = 0.7
+
+# ===========================================
+# HTML to Markdown Options
+# ===========================================
+[html_options]
+# Heading style: atx (#), underlined (===), atx_closed (# ... #)
+heading_style = "atx"
+
+# Code block style: backticks (```), indented, tildes (~~~)
+code_block_style = "backticks"
+
+# Extract metadata from HTML documents
+extract_metadata = false
+
+# Enable automatic linking for bare URLs
+autolinks = true
+
+# Disable text wrapping (important for LLMs)
+wrap = false
+
+# ===========================================
+# HTML Preprocessing (Clean web pages)
+# ===========================================
+[html_options.preprocessing]
+# Enable HTML preprocessing
+enabled = true
+
+# Remove navigation elements (nav, menu, breadcrumbs)
+remove_navigation = true
+
+# Remove form elements
+remove_forms = true
+
+# Remove script tags
+remove_scripts = true
+
+# Remove style tags
+remove_styles = true
+
+# ===========================================
+# Chunking (for RAG/LLM pipelines)
+# ===========================================
+[chunking]
+# Enable text chunking
+enabled = false
+
+# Maximum chunk size (characters)
+max_chunk_size = 1000
+
+# Overlap between chunks (characters)
+max_overlap = 200
+
+# ===========================================
+# Language Detection
+# ===========================================
+[language_detection]
+# Enable language detection
+enabled = false
+
+# Minimum confidence for language detection
+min_confidence = 0.8
+
+# Detect multiple languages
+detect_multiple = false

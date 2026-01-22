@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Output directories (keep structure, ignore contents)
+files/output/*
+!files/output/.gitkeep
+files/error/*
+!files/error/.gitkeep
+
+# Processed state
+.processed.json
+
+# URL cache
+files/input/.url-cache/
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
