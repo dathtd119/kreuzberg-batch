@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ===========================================
   # Main Kreuzberg Batch Processor
@@ -15,10 +13,7 @@ services:
     env_file:
       - .env
     environment:
-      - BROWSERLESS_URL=http://browserless:3000
-    depends_on:
-      browserless:
-        condition: service_healthy
+      - BROWSERLESS_URL=${BROWSERLESS_URL:-http://browserless:3000}
     restart: unless-stopped
     networks:
       - kreuzberg-net
