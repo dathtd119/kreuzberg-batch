@@ -6,9 +6,6 @@
 import type { Config, FetchResult } from "./types";
 import { logger } from "./logger";
 
-/**
- * Layer 1: Native Fetch (fastest, for static pages)
- */
 async function fetchWithNative(
   url: string,
   config: Config
@@ -36,7 +33,6 @@ async function fetchWithNative(
 
     const html = await response.text();
     
-    // Check if page requires JavaScript (common indicators)
     if (
       html.includes("Please enable JavaScript") ||
       html.includes("noscript") && html.length < 5000 ||
@@ -54,9 +50,6 @@ async function fetchWithNative(
   }
 }
 
-/**
- * Layer 2: Playwright (for JS-rendered pages)
- */
 async function fetchWithPlaywright(
   url: string,
   config: Config
@@ -82,7 +75,6 @@ async function fetchWithPlaywright(
         timeout: config.playwrightTimeout,
       });
 
-      // Wait for dynamic content
       await page.waitForTimeout(config.playwrightWait);
 
       const html = await page.content();
@@ -100,9 +92,6 @@ async function fetchWithPlaywright(
   }
 }
 
-/**
- * Layer 3: Browserless (REST API, for complex pages)
- */
 async function fetchWithBrowserless(
   url: string,
   config: Config
@@ -151,23 +140,16 @@ async function fetchWithBrowserless(
   }
 }
 
-/**
- * Fetch URL with 3-layer fallback
- */
 export async function fetchUrl(url: string, config: Config): Promise<FetchResult> {
-  // Layer 1: Native Fetch
   let result = await fetchWithNative(url, config);
   if (result.success) return result;
 
-  // Layer 2: Playwright
   result = await fetchWithPlaywright(url, config);
   if (result.success) return result;
 
-  // Layer 3: Browserless
   result = await fetchWithBrowserless(url, config);
   if (result.success) return result;
 
-  // All layers failed
   logger.error(`All fetch layers failed for: ${url}`);
   return {
     url,
@@ -178,9 +160,6 @@ export async function fetchUrl(url: string, config: Config): Promise<FetchResult
   };
 }
 
-/**
- * Parse URLs from urls.txt file
- */
 export async function parseUrlFile(filePath: string): Promise<Array<{ url: string; filename?: string }>> {
   try {
     const file = Bun.file(filePath);
@@ -191,38 +170,75 @@ export async function parseUrlFile(filePath: string): Promise<Array<{ url: strin
     const content = await file.text();
     const lines = content.split("\n").filter((line) => line.trim());
     
-    return lines.map((line) => {
+    const urls: Array<{ url: string; filename?: string }> = [];
+    
+    for (const line of lines) {
       const trimmed = line.trim();
       
-      // Skip comments
       if (trimmed.startsWith("#")) {
-        return null;
+        continue;
       }
       
-      // Format: URL [optional_filename]
-      // Example: https://example.com/page my-page
       const parts = trimmed.split(/\s+/);
-      const url = parts[0];
+      const urlCandidate = parts[0];
       const filename = parts[1];
       
-      // Validate URL
       try {
-        new URL(url);
-        return { url, filename };
+        new URL(urlCandidate);
+        urls.push({ url: urlCandidate, filename });
       } catch {
-        logger.warn(`Invalid URL skipped: ${url}`);
-        return null;
+        // Not a valid URL, skip silently
       }
-    }).filter((entry): entry is { url: string; filename?: string } => entry !== null);
+    }
+    
+    return urls;
   } catch (error) {
     logger.error(`Failed to parse URL file: ${error}`);
     return [];
   }
 }
 
-/**
- * Generate filename from URL
- */
+export function isUrlListFile(filePath: string): boolean {
+  return filePath.endsWith(".txt");
+}
+
+export async function detectUrlsInTextFile(filePath: string): Promise<boolean> {
+  try {
+    const file = Bun.file(filePath);
+    if (!(await file.exists())) {
+      return false;
+    }
+
+    const content = await file.text();
+    const lines = content.split("\n").filter((line) => line.trim());
+    
+    if (lines.length === 0) {
+      return false;
+    }
+
+    let urlCount = 0;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("#")) continue;
+      
+      const urlCandidate = trimmed.split(/\s+/)[0];
+      try {
+        const parsed = new URL(urlCandidate);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+          urlCount++;
+        }
+      } catch {
+        // Not a URL
+      }
+    }
+
+    const nonCommentLines = lines.filter(l => !l.trim().startsWith("#")).length;
+    return nonCommentLines > 0 && urlCount === nonCommentLines;
+  } catch {
+    return false;
+  }
+}
+
 export function urlToFilename(url: string, customName?: string): string {
   if (customName) {
     return customName.endsWith(".html") ? customName : `${customName}.html`;

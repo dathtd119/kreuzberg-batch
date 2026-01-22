@@ -5,8 +5,8 @@
  * using kreuzberg CLI for extraction.
  */
 
-import { join } from "path";
-import { existsSync, mkdirSync } from "fs";
+import { join, basename } from "path";
+import { existsSync, mkdirSync, readdirSync } from "fs";
 import { loadConfig, validateConfig } from "./config";
 import { logger, createLogger } from "./logger";
 import { 
@@ -18,7 +18,7 @@ import {
   markFileProcessed,
   getProcessedStats 
 } from "./hash";
-import { fetchUrl, parseUrlFile, urlToFilename } from "./fetcher";
+import { fetchUrl, parseUrlFile, urlToFilename, detectUrlsInTextFile } from "./fetcher";
 import { 
   extractDocument, 
   generateOutputPath, 
@@ -33,17 +33,9 @@ import {
 } from "./watcher";
 import type { Config, FileEntry, ProcessingJob, ProcessedState } from "./types";
 
-// ===========================================
-// Globals
-// ===========================================
-
 let isShuttingDown = false;
 let config: Config;
 let state: ProcessedState;
-
-// ===========================================
-// Signal Handlers
-// ===========================================
 
 function setupSignalHandlers(): void {
   const shutdown = async (signal: string) => {
@@ -52,7 +44,6 @@ function setupSignalHandlers(): void {
     
     logger.info(`Received ${signal}. Shutting down gracefully...`);
     
-    // Save state before exit
     const hashFilePath = join(config.outputDir, config.hashFile);
     saveProcessedState(hashFilePath, state);
     
@@ -64,59 +55,66 @@ function setupSignalHandlers(): void {
   process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
-// ===========================================
-// URL Processing
-// ===========================================
-
-async function processUrls(): Promise<void> {
-  const urlFilePath = join(config.inputDir, config.urlFile);
+async function findUrlFiles(): Promise<string[]> {
+  const urlFiles: string[] = [];
   
-  if (!config.fetchUrls || !existsSync(urlFilePath)) {
-    logger.debug("URL fetching disabled or urls.txt not found");
-    return;
+  try {
+    const items = readdirSync(config.inputDir, { withFileTypes: true });
+    
+    for (const item of items) {
+      if (item.isFile() && item.name.endsWith(".txt") && !item.name.startsWith(".")) {
+        const filePath = join(config.inputDir, item.name);
+        const isUrlFile = await detectUrlsInTextFile(filePath);
+        if (isUrlFile) {
+          urlFiles.push(filePath);
+        }
+      }
+    }
+  } catch (error) {
+    logger.error(`Failed to scan for URL files: ${error}`);
   }
+  
+  return urlFiles;
+}
 
-  logger.info("Processing URLs from urls.txt...");
+async function processUrlFile(urlFilePath: string): Promise<void> {
+  const fileName = basename(urlFilePath);
+  logger.info(`Processing URLs from ${fileName}...`);
   
   const urls = await parseUrlFile(urlFilePath);
   if (urls.length === 0) {
-    logger.debug("No URLs to process");
+    logger.debug(`No URLs found in ${fileName}`);
     return;
   }
 
-  logger.info(`Found ${urls.length} URLs to process`);
+  logger.info(`Found ${urls.length} URLs in ${fileName}`);
 
   for (const urlEntry of urls) {
     if (isShuttingDown) break;
 
     const filename = urlToFilename(urlEntry.url, urlEntry.filename);
-    const tempPath = join(config.inputDir, ".url-cache", filename);
+    const tempDir = join(config.inputDir, ".url-cache");
+    const tempPath = join(tempDir, filename);
     
-    // Check if already processed (by URL hash)
     const urlHash = calculateStringHash(urlEntry.url);
     if (isFileProcessed(state, urlEntry.url, urlHash)) {
       logger.debug(`URL already processed: ${urlEntry.url}`);
       continue;
     }
 
-    // Fetch URL
     const result = await fetchUrl(urlEntry.url, config);
     
     if (!result.success) {
-      logger.error(`Failed to fetch URL: ${urlEntry.url}`);
+      logger.error(`Failed to fetch URL: ${urlEntry.url} - ${result.error}`);
       continue;
     }
 
-    // Create temp directory for HTML
-    const tempDir = join(config.inputDir, ".url-cache");
     if (!existsSync(tempDir)) {
       mkdirSync(tempDir, { recursive: true });
     }
 
-    // Write HTML to temp file
     await Bun.write(tempPath, result.html);
 
-    // Generate output path
     const outputPath = generateOutputPath(
       tempPath,
       config.inputDir,
@@ -124,7 +122,6 @@ async function processUrls(): Promise<void> {
       config
     );
 
-    // Extract using kreuzberg
     const extractResult = await extractDocument(tempPath, outputPath, config);
 
     if (extractResult.success) {
@@ -134,11 +131,36 @@ async function processUrls(): Promise<void> {
       logger.error(`Extraction failed for URL: ${urlEntry.url}`);
     }
   }
+  
+  const urlFileHash = await calculateFileHash(urlFilePath);
+  markFileProcessed(state, urlFilePath, urlFileHash, "url-list-processed");
 }
 
-// ===========================================
-// File Processing
-// ===========================================
+async function processUrls(): Promise<void> {
+  if (!config.fetchUrls) {
+    logger.debug("URL fetching disabled");
+    return;
+  }
+
+  const urlFiles = await findUrlFiles();
+  
+  if (urlFiles.length === 0) {
+    logger.debug("No URL list files found");
+    return;
+  }
+
+  for (const urlFile of urlFiles) {
+    if (isShuttingDown) break;
+    
+    const fileHash = await calculateFileHash(urlFile);
+    if (isFileProcessed(state, urlFile, fileHash)) {
+      logger.debug(`URL file already processed: ${basename(urlFile)}`);
+      continue;
+    }
+    
+    await processUrlFile(urlFile);
+  }
+}
 
 async function processFiles(): Promise<void> {
   logger.info("Scanning input directory...");
@@ -147,10 +169,15 @@ async function processFiles(): Promise<void> {
   const newFiles: FileEntry[] = [];
 
   for (const entry of entries) {
-    // Calculate file hash
+    if (entry.path.endsWith(".txt")) {
+      const isUrlFile = await detectUrlsInTextFile(entry.path);
+      if (isUrlFile) {
+        continue;
+      }
+    }
+    
     const fileHash = await calculateFileHash(entry.path);
     
-    // Check if already processed
     if (config.skipExisting && isFileProcessed(state, entry.path, fileHash)) {
       logger.debug(`Skipping already processed: ${entry.relativePath}`);
       continue;
@@ -166,10 +193,8 @@ async function processFiles(): Promise<void> {
 
   logger.info(`Processing ${newFiles.length} new files...`);
 
-  // Create jobs
   const jobs = createJobs(newFiles);
 
-  // Process concurrently
   const concurrency = config.concurrentJobs;
   for (let i = 0; i < jobs.length; i += concurrency) {
     if (isShuttingDown) break;
@@ -193,25 +218,17 @@ async function processFiles(): Promise<void> {
       })
     );
 
-    // Save state after each batch
     const hashFilePath = join(config.outputDir, config.hashFile);
     saveProcessedState(hashFilePath, state);
   }
 }
-
-// ===========================================
-// Main Loop
-// ===========================================
 
 async function runCycle(): Promise<void> {
   logger.info("Starting processing cycle...");
   const startTime = Date.now();
 
   try {
-    // Process URLs first
     await processUrls();
-
-    // Process files
     await processFiles();
 
     const duration = (Date.now() - startTime) / 1000;
@@ -231,10 +248,8 @@ async function main(): Promise<void> {
 ╚═══════════════════════════════════════════════════════════╝
   `);
 
-  // Load configuration
   config = loadConfig();
   
-  // Validate configuration
   const errors = validateConfig(config);
   if (errors.length > 0) {
     logger.error("Configuration errors:");
@@ -242,7 +257,6 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Setup logger with configured level
   const log = createLogger(config.logLevel);
   
   logger.info(`Watch interval: ${config.watchInterval}s`);
@@ -252,7 +266,6 @@ async function main(): Promise<void> {
   logger.info(`Playwright enabled: ${config.playwrightEnabled}`);
   logger.info(`Browserless enabled: ${config.browserlessEnabled}`);
 
-  // Ensure directories exist
   [config.inputDir, config.outputDir, config.errorDir].forEach((dir) => {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
@@ -260,18 +273,14 @@ async function main(): Promise<void> {
     }
   });
 
-  // Load processed state
   const hashFilePath = join(config.outputDir, config.hashFile);
   state = loadProcessedState(hashFilePath);
   logger.info(`Loaded state: ${getProcessedStats(state).totalFiles} files tracked`);
 
-  // Setup signal handlers
   setupSignalHandlers();
 
-  // Run initial cycle
   await runCycle();
 
-  // Start watch loop
   logger.info(`Starting watch loop (interval: ${config.watchInterval}s)...`);
   
   while (!isShuttingDown) {
@@ -282,10 +291,6 @@ async function main(): Promise<void> {
     }
   }
 }
-
-// ===========================================
-// Entry Point
-// ===========================================
 
 main().catch((error) => {
   logger.error(`Fatal error: ${error}`);
