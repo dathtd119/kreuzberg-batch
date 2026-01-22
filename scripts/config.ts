@@ -50,11 +50,6 @@ export function loadConfig(): Config {
     playwrightWait: parseInt(process.env.PLAYWRIGHT_WAIT, 5000),
     playwrightTimeout: parseInt(process.env.PLAYWRIGHT_TIMEOUT, 60000),
 
-    // Browserless (Layer 3)
-    browserlessEnabled: parseBool(process.env.BROWSERLESS_ENABLED, true),
-    browserlessUrl: process.env.BROWSERLESS_URL || "http://browserless:3000",
-    browserlessToken: process.env.BROWSERLESS_TOKEN || "",
-
     // Error handling
     maxRetries: parseInt(process.env.MAX_RETRIES, 3),
     retryDelay: parseInt(process.env.RETRY_DELAY, 5000),

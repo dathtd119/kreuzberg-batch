@@ -7,42 +7,10 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: kreuzberg-batch
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - ./files:/files
       - ./config:/config:ro
     env_file:
       - .env
-    environment:
-      - BROWSERLESS_URL=${BROWSERLESS_URL:-http://browserless:3000}
     restart: unless-stopped
-    networks:
-      - kreuzberg-net
-
-  # ===========================================
-  # Browserless Chrome - Layer 3 fallback
-  # REST API for headless browser
-  # ===========================================
-  browserless:
-    image: browserless/chrome:latest
-    container_name: kreuzberg-browserless
-    environment:
-      - MAX_CONCURRENT_SESSIONS=${BROWSERLESS_MAX_SESSIONS:-5}
-      - CONNECTION_TIMEOUT=${BROWSERLESS_TIMEOUT:-60000}
-      - TOKEN=${BROWSERLESS_TOKEN:-}
-    ports:
-      - "${BROWSERLESS_PORT:-3000}:3000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/pressure"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    restart: unless-stopped
-    networks:
-      - kreuzberg-net
-    profiles:
-      - with-browserless
-
-networks:
-  kreuzberg-net:
-    driver: bridge
