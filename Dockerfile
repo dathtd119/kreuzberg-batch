@@ -35,10 +35,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Bun
+# Install Bun to /usr/local/bin (globally accessible)
 RUN curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}" \
-    && mv /root/.bun/bin/bun /usr/local/bin/ \
-    && chmod +x /usr/local/bin/bun \
+    && mv /root/.bun/bin/bun /usr/local/bin/bun \
+    && ln -s /usr/local/bin/bun /usr/local/bin/bunx \
+    && chmod +x /usr/local/bin/bun /usr/local/bin/bunx \
     && rm -rf /root/.bun
 
 # Create app directories
@@ -49,16 +50,15 @@ RUN mkdir -p /app/scripts /files/input /files/output /files/error \
 WORKDIR /app/scripts
 COPY --chown=kreuzberg:kreuzberg scripts/package.json ./
 
-# Install dependencies as kreuzberg user
-USER kreuzberg
-
-# Install npm dependencies (bun will generate lockfile)
-RUN bun install
+# Install npm dependencies as root (then fix permissions)
+RUN bun install \
+    && chown -R kreuzberg:kreuzberg /app/scripts
 
 # Install Playwright browsers (chromium only to save space)
-RUN bunx playwright install chromium
-
-USER root
+# Run as root to install system deps, then fix ownership
+RUN PLAYWRIGHT_BROWSERS_PATH=/app/.playwright \
+    bun x playwright install chromium \
+    && chown -R kreuzberg:kreuzberg /app/.playwright
 
 # Copy all scripts
 COPY --chown=kreuzberg:kreuzberg scripts/ ./
@@ -71,7 +71,8 @@ ENV NODE_ENV=production \
     INPUT_DIR=/files/input \
     OUTPUT_DIR=/files/output \
     ERROR_DIR=/files/error \
-    CONFIG_DIR=/config
+    CONFIG_DIR=/config \
+    PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \

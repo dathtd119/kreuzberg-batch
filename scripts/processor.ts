@@ -79,12 +79,10 @@ export async function extractDocument(
   try {
     logger.debug(`Extracting: ${inputPath}`);
 
-    // Build kreuzberg command
     const args = [
       "extract",
       inputPath,
       "--format", "text",
-      "--content-format", "markdown",
     ];
 
     // Add config file if exists
