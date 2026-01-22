@@ -90,9 +90,12 @@ export async function extractDocument(
       args.push("--config", config.kreuzbergConfig);
     }
 
-    // Add OCR flag
     if (config.ocrEnabled) {
       args.push("--ocr", "true");
+    }
+
+    if (process.env.FORCE_OCR === "true") {
+      args.push("--force-ocr", "true");
     }
 
     // Add quality processing
