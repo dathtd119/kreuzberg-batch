@@ -30,11 +30,6 @@ export interface Config {
   playwrightWait: number;
   playwrightTimeout: number;
 
-  // Browserless (Layer 3)
-  browserlessEnabled: boolean;
-  browserlessUrl: string;
-  browserlessToken: string;
-
   // Error handling
   maxRetries: number;
   retryDelay: number;
@@ -89,7 +84,7 @@ export interface FetchResult {
   url: string;
   html: string;
   success: boolean;
-  method: "fetch" | "playwright" | "browserless";
+  method: "fetch" | "playwright";
   error?: string;
 }
 

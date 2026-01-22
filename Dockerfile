@@ -6,7 +6,7 @@
 FROM ghcr.io/kreuzberg-dev/kreuzberg:latest
 
 # Build arguments
-ARG BUN_VERSION=1.1.42
+ARG BUN_VERSION=1.3.6
 
 USER root
 

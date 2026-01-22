@@ -92,62 +92,13 @@ async function fetchWithPlaywright(
   }
 }
 
-async function fetchWithBrowserless(
-  url: string,
-  config: Config
-): Promise<FetchResult> {
-  if (!config.browserlessEnabled) {
-    return { url, html: "", success: false, method: "browserless", error: "Browserless disabled" };
-  }
-
-  try {
-    logger.debug(`[Layer 3] Fetching with Browserless: ${url}`);
-    
-    const browserlessUrl = `${config.browserlessUrl}/content`;
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
-    
-    if (config.browserlessToken) {
-      headers["Authorization"] = `Bearer ${config.browserlessToken}`;
-    }
-
-    const response = await fetch(browserlessUrl, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        url,
-        waitForTimeout: config.playwrightWait,
-        gotoOptions: {
-          waitUntil: "networkidle2",
-          timeout: config.playwrightTimeout,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Browserless HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const html = await response.text();
-    
-    logger.info(`[Layer 3] Successfully fetched: ${url}`);
-    return { url, html, success: true, method: "browserless" };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.debug(`[Layer 3] Failed: ${message}`);
-    return { url, html: "", success: false, method: "browserless", error: message };
-  }
-}
-
 export async function fetchUrl(url: string, config: Config): Promise<FetchResult> {
+  // Layer 1: Native fetch
   let result = await fetchWithNative(url, config);
   if (result.success) return result;
 
+  // Layer 2: Playwright (final fallback)
   result = await fetchWithPlaywright(url, config);
-  if (result.success) return result;
-
-  result = await fetchWithBrowserless(url, config);
   if (result.success) return result;
 
   logger.error(`All fetch layers failed for: ${url}`);
@@ -155,7 +106,7 @@ export async function fetchUrl(url: string, config: Config): Promise<FetchResult
     url,
     html: "",
     success: false,
-    method: "browserless",
+    method: "playwright",
     error: "All fetch methods failed",
   };
 }
