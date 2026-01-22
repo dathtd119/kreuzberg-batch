@@ -7,17 +7,8 @@ bun.lockb
 .env.local
 .env.*.local
 
-# Output directories (keep structure, ignore contents)
-files/output/*
-!files/output/.gitkeep
-files/error/*
-!files/error/.gitkeep
-
-# Processed state
-.processed.json
-
-# URL cache
-files/input/.url-cache/
+# Files directory (user data, not tracked)
+files/
 
 # Logs
 *.log
