@@ -1,0 +1,17 @@
+{
+  "name": "kreuzberg-batch",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "bun run main.ts",
+    "dev": "bun --watch run main.ts"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "playwright": "^1.40.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.10.0"
+  }
+}
